@@ -9,7 +9,7 @@ import os
 # create a directory to download all the turnstile data
 os.mkdir("turnstile_data_")
 
-# MTA has made the data public at "http://web.mta.info/developers/data/nyct/turnstile/"
+# MTA has made the data public at "http://web.mta.info/developers/turnstile.html"
  
 base_url = "http://web.mta.info/developers/data/nyct/turnstile/turnstile_"
 d = datetime.date(2019, 11, 16)
