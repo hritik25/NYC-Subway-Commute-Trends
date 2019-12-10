@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import pandas as pd
 import datetime
 from datetime import timedelta
@@ -5,7 +7,7 @@ import urllib.request
 import os
 
 # create a directory to download all the turnstile data
-os.mkdir("turnstile_data")
+os.mkdir("turnstile_data_")
 
 # MTA has made the data public at "http://web.mta.info/developers/data/nyct/turnstile/"
  
