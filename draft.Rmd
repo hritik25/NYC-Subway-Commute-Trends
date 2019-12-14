@@ -1,0 +1,192 @@
+---
+title: "Subway Commute Trends in Manhattan"
+author: "Hritik Jain, Shahen Mirzoyan"
+date: "December 2019"
+output:
+  html_document:
+    toc: true
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE,
+                      warning = FALSE,
+                      echo = FALSE)
+```
+
+<style>
+p.caption {
+  font-size: 1em;
+  font-family: 'Big Caslon';
+}
+</style>
+
+<style>
+  body {
+  text-align: justify}
+</style>
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(dplyr)
+library(lubridate)
+library(reshape2)
+````
+
+## I: Introduction
+
+Opened in 1904, the New York City Subway is one of the world’s oldest public transit systems, one of the most-used, and the one with the most stations. The New York City Subway is the largest rapid transit system in the world by number of stations, with 472 stations in operation (424 if stations connected by transfers are counted as single stations). Every day, over 4.3 million people use the public transit system, and there are over 1 billion turnstile swipes per year!
+
+Stations are located throughout the boroughs of Manhattan, Brooklyn, Queens, and the Bronx. Most of our Columbia community resides in Manhattan, and we were curious to look at the public transport commute trends. We are interested in an exploratory analysis of the data collected at subway stations (entries and exits counts and timestamps recorded at the turnstiles). Some of the questions we try to answer here are: Immediately available insights about subway commuters in Manhattan, such as: which are the busiest subway stations? How does this vary over time of the day? How do the subway commute trends change over the year - and how do seasons and holidays/holiday months affect the subway traffic? Are there interesting trends to be observed at the popular stations like Times Squre and our very own 116th Street Columbia station?
+
+## II. Data sources
+
+The data we use in our analysis is owned by the Metropolitan Transportation Authority (MTA, which serves 12 counties in Downstate New York. It is the largest largest public transit authority in the United States.The data is open and available for download on their website at the url http://web.mta.info/developers/turnstile.html. 
+
+The data collection began in 2010, so data for the past ten years is available for download. We will be using only a subset (most recent - year 2019) of the data, however, for our analysis.
+
+There is a .csv file for each week, with one record for the cumulative count of entries and exits for a given turnstile at each of the scheduled audit events for each day of the week in a given station. There were usually six audits, which is to say data from a turnstile was recorded six times a day, four hours apart. The data fields and descriptions follow:
+
+C/A,UNIT,SCP,STATION,LINENAME,DIVISION,DATE,TIME,DESC,ENTRIES,EXITS
+
+1. C/A      = Control Area (A002)
+2. UNIT     = Remote Unit for a station (R051)
+3. SCP      = Subunit Channel Position represents an specific address for a device (02-00-00)
+4. STATION  = Represents the station name the device is located at
+5. LINENAME = Represents all train lines that can be boarded at this station. Normally lines are represented by one character.  LINENAME 456NQR repersents train server for 4, 5, 6, N, Q, and R trains.
+6. DIVISION = Represents the Line originally the station belonged to BMT, IRT, or IND   
+7. DATE     = Represents the date (MM-DD-YY)
+8. TIME     = Represents the time (hh:mm:ss) for a scheduled audit event
+9. DESc     = Represent the "REGULAR" scheduled audit event (Normally occurs every 4 hours). Audits may occur more that 4 hours due to planning, or troubleshooting activities. Additionally, there may be a "RECOVR AUD" entry: This refers to a missed audit that was recovered.
+10. ENTRIES  = The comulative entry register value for a device
+11. EXITS    = The cumulative exit register value for a device
+
+We only used entries which had the DESc "REGULAR", ie which were collected during a regular scheduled audit event, and removed the troubleshooting ones. We did not use the fields C/A, UNIT, LINENAME and DIVISION in our analysis, since the SCP and STATION name uniquely identify a turntile.
+
+## III. Data transformation
+
+The first step was to filter out stations from boroughs other than Manhattan. The borough information for the stations was obtained from another file available on the MTA website - http://web.mta.info/developers/data/nyct/subway/Stations.csv. This was non-trivial due to the fact that the names in this file did not perfectly match with the names in turnstile data. We resolved it using fuzzy matching on the names. We now had 93 Manhattan stations in our data.
+
+Next, we aggregated the data collected at different turnstiles in the same subway station into one record for the station, at a given reading timestamp in a day. Since the original data contains cumulative counts of entries/exits, the numbers run into millions. We found it more useful to use the differences which were basically the numbers of entries/exits between two successive readings, ie, in the past four hours.
+
+## IV. Missing values
+A fraction of the data (1.32% or rows) of the data trasformed as described above was found to be corrupt with negative difference between successive cumulative counts. We verified with original source data files that this was due to misreadings at the turnstiles. We excluded these rows from our analyses.
+
+Missing values manifested in the form that at times, the turnstiles must have been off due to which their cumulative counts did not change between successive entries. Again, we excluded these entries from our analysis. 
+
+Finally, there were outlier numbers of entries and/or exists as a few days, and mostly at the popular stations or due to misreadings, where the number of entries/exits in the past 4 hour window were found to be abnormally large. For the sake of keeping axes scales and ranges reasonble, we removed rows where the number of entries/exits were more than 10000.
+
+## V. Results
+
+```{r}
+original <- read.csv("/Users/candide/Acads/cleaned_data_final.csv")
+df <- subset(original, NET_ENTRIES < 10000 & NET_EXITS < 10000)
+df <- df %>% filter(df$NET_ENTRIES != 0 | df$NET_EXITS != 0)
+h = ymd_hms(as.character(df$DATETIME))
+df$hour_of_day = as.integer(hour(h))
+df$day_of_week = weekdays(as.Date(df$DATETIME))
+df$day_of_week <- factor(df$day_of_week, levels= c("Monday", 
+    "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday","Sunday"))
+```
+
+```{r}
+df_avg <- df %>% group_by(STATION) %>% 
+  summarise(Average_entries = mean(NET_ENTRIES), Average_exits = mean(NET_EXITS)) %>%
+  ungroup()
+df_avg <- as.data.frame(df_avg)
+# ggplot(aes(x=Average_entries,y=Average_exits)) + geom_point() + # geom_text(aes(label=STATION),size=2,hjust=-0.1,vjust=1.5) + xlab("Average Entries") + ylab("Average Exits")
+```
+
+Let's get a high level overview of our dataset, and what traffic looks like for each of our 93 Manhattan subway stations.
+
+```{r}
+library(scatterD3)
+scatterD3(data = df_avg, x=Average_entries, y=Average_exits, tooltip_text = df_avg$STATION,
+          xlab = "Average Entries", ylab = "Average Exits", point_size = 200, point_opacity = 0.5,
+          colors = "#A94175")
+```
+
+On the horizontal axis we have the average number of entries throughout the year at each station. The data shows a very clear and intuitive correlation: stations with a high number of exits also have a high number of entries. Moreover, by examining the graph we can already spot the busiest as well as the least crowded subway stations: the two stations at 42nd street, or Times Square, have by far the highest amount of subway traffic.
+
+On the other hand, the point at the bottom left of our plot, 190th st, represents the station with both the least number of entries and least number of exits throughout the year.
+
+```{r}
+stations_by_traffic = df %>% group_by(STATION) %>% summarise(Total_traffic = sum(NET_EXITS + NET_ENTRIES))
+#find busiest and slowest n stations overall
+
+n = 5
+
+busiestN = head(stations_by_traffic[order(-stations_by_traffic$Total_traffic),],n)
+slowestN = head(stations_by_traffic[order(stations_by_traffic$Total_traffic),],n)
+
+
+ggplot(busiestN,aes(x=reorder(STATION,Total_traffic),y=Total_traffic)) + geom_bar(stat="identity") + xlab("Station")+ylab("Total traffic") + ggtitle("Busiest 5 Stations in Manhattan by Traffic") + theme_bw()
+```
+
+There are over 3 million entries and exits at 125th street. One would expect 42nd street (Times Square) to be the busiest station throughout Manhattan.
+
+Let's examine the traffic seen by these stations by the hour:
+
+```{r}
+df %>% select(STATION, hour_of_day, NET_ENTRIES, NET_EXITS) %>%
+group_by(STATION, hour_of_day) %>%
+summarise(Average_exits = mean(NET_EXITS), Average_entries = mean(NET_ENTRIES)) %>%
+ungroup() %>% melt(id.vars = c("STATION", 'hour_of_day')) %>%
+filter(STATION %in% unique(busiestN$STATION)[1:5]) %>%
+ggplot(aes(x=hour_of_day,y=value, fill = as.factor(variable))) +
+geom_bar(stat="identity", position = 'dodge') +  labs(fill = '') +scale_x_continuous("Hour", labels = as.character(0:23), breaks = 0:23)+  ylab("Entries/Exits") + scale_fill_manual(labels = c('Entries', 'Exits'), values = c('red', 'blue')) + ggtitle("Average entries and exits by the hour") + facet_wrap(~STATION,ncol=2) + theme(axis.text=element_text(size=6))
+```
+
+The traffic at the most popular stations appears to spike in the hours between 2:00 pm and 6:00 pm. Lets check whether this is the case across all stations: 
+
+```{r}
+df %>% group_by(hour_of_day) %>% summarize(Average_traffic = mean(NET_EXITS + NET_ENTRIES)) %>% ggplot(aes(x=hour_of_day,y=Average_traffic)) + geom_line(stat="identity") + xlab("Hour of day") + ylab("Average traffic") + ggtitle("Average traffic in Manhattan by the hour") + theme_bw()
+```
+
+Indeed, the general trend across all stations is a spike in traffic during the afternoon hours.
+
+```{r}
+df %>%
+  group_by(STATION,day_of_week) %>% 
+  summarise(Average_traffic=mean(NET_ENTRIES + NET_EXITS)) %>%
+  filter(STATION %in% c('116 ST','42 ST-PORT AUTH')) %>%
+  ggplot(aes(x=day_of_week,y=Average_traffic,fill=STATION)) + geom_bar(position="dodge",stat='identity') + xlab("Day of Week")+ ylab("Average traffic") + ggtitle("Times Square vs. Columbia University") + theme_bw() 
+```
+
+As expected, we observe that Columbia University is busiest on weekdays and has a significant drop in traffic over the weekends. On the other hand, Times Square sees a slight increase in traffic up until Sunday. Both stations have significantly less traffic on Sundays than throughout the week.
+
+
+Lastly, we examine the trend of traffic over the period of a year, at three stations of special interest to us:
+```{r}
+cleaned_data <- read.csv('/Users/candide/Acads/cleaned_data_final.csv')
+cleaned_data <- subset(cleaned_data, NET_EXITS < 10000 & NET_ENTRIES < 10000)
+cleaned_data$DATETIME <- as.Date(cleaned_data$DATETIME, format = "%Y-%m-%d %H:%M:%S")
+cleaned_data <- cleaned_data %>% mutate(day = format(DATETIME, "%d"), month = format(DATETIME, "%m"), year = format(DATETIME, "%Y"))
+```
+
+```{r}
+monthly_data <- subset(cleaned_data, cleaned_data$STATION %in% c("125 ST", "42 ST-PORT AUTH", "116 ST")) %>%
+  group_by(STATION, month, year) %>%
+  summarise(avg_monthly_exits = mean(NET_EXITS), avg_monthly_entries = mean(NET_ENTRIES)) %>%
+  ungroup() %>%
+  mutate(time = as.Date(paste(year, as.character(as.integer(month)), "28", sep="-"), format = "%Y-%m-%d"))
+  
+monthly_data_ <- monthly_data %>%
+  select(STATION, avg_monthly_exits, time)
+
+ggplot(monthly_data_, aes(x = time, y = avg_monthly_exits, color = STATION)) + 
+  geom_line(size=2) + xlab("Month of the year") + ylab("Average daily number of exits at the station")
+```
+
+
+These line charts illustrate a seasonal trend for Columbia station and a secular trend for both 42nd and 125th stations. In particular, we see a very sharp drop in Columbia exits early in the year, and a smaller drop between the end of the spring term and the beginning of the summer term. We also see a steep drop at the end of November, as one would expect during Thanksgiving break. 
+
+Another interesting observation is the closeness in trends 125th street and 42nd street exit counts. We see that there is a longterm trend of increase in influx at these two stations over time, although there has been a sharp drop in the month of December. We speculate that this is due to the number of people leaving the city in the month of December. 
+
+## VI. Conclusion
+In conclusion, this project gave us a lot of insight into subway commute trends throughout Manhattan. We learned where the busiest traffic is, and what the peak hours are for the NYC Transit. We also noticed seasonal and secular trends in several stations of interest, such as Columbia University and Times Square. Using only entry and exit counts for various subway stations throughout the city, we were able to derive a lot of interesting conclusions regarding the flow of people in NYC.
+
+Throughout this project we learned a lot about preprocessing raw data, and the importance of keeping our code and analysis coherent and organized. In fact, the most difficult part of this assignment involved the preprocessing of raw turnstile data provided. We had to make decisions about what data to keep, and how to account for strange drops in cumulative turnstile counts. 
